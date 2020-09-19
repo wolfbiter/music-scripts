@@ -22,14 +22,23 @@ mkdir $WORKING_DIR
 
 # download from youtube
 cd $WORKING_DIR
-youtube-dl -x -i --audio-format mp3 -f bestaudio "$YOUTUBE_URL"
+if youtube-dl -x -i --audio-format mp3 -f bestaudio "$YOUTUBE_URL"
+then
+  printf "\nSUCCESSFULLY DOWNLOADED ALL TRACKS\n\n"
+else
+  printf "\nERROR DOWNLOADING SOME TRACK(S)\n\n"
+fi
 cd "../"
 
 # analyze tracks with keyfinder
 for file in "$WORKING_DIR"/*
 do
-  echo "Analyzing track: $file"
-  /Applications/KeyFinder.app/Contents/MacOS/KeyFinder -f "$file" -w
+  if /Applications/KeyFinder.app/Contents/MacOS/KeyFinder -f "$file" -w
+  then
+    echo "  -  Analyzed track: $file"
+  else
+    printf "\n\nERROR ANALYZING TRACK: $(file)\n\n"
+  fi
 done
 
 echo "DONE ANALYZING"
