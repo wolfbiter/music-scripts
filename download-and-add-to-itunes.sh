@@ -47,5 +47,9 @@ echo "DONE ANALYZING"
 echo "$(find `pwd` -name $TIME_STAMP)"
 ./create-itunes-playlist.scpt "$(find `pwd` -name $TIME_STAMP)" "$PLAYLIST_NAME"
 
+echo "ADDED ITUNES PLAYLIST $PLAYLIST_NAME"
+
 # clear working directory
 if [ -d "$WORKING_DIR" ]; then rm -rf $WORKING_DIR; fi
+
+echo "CLEARED WORKING DIRECTORY: $WORKING_DIR"
