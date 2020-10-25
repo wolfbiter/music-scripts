@@ -1,6 +1,5 @@
 import argparse
 import subprocess
-import math
 
 from os import listdir
 from os.path import isfile, join, basename
@@ -24,20 +23,63 @@ def add_transitions_to_audacity(transitions):
 
     # only load x for first transition
     if i == 0:
-      audacity.load_track(transition['x'], end=transition['offset'], track=i)
+      audacity.load_track(
+        transition['x'],
+        end=transition['x_offset'],
+        track=i
+      )
 
     # get y_end from next transition's offset
-    y_end = 100
+    y_end = 1000
     if i != len(transitions) - 1:
       next_transition = transitions[i + 1]
-      y_end = next_transition['offset']
+      y_end = next_transition['x_offset']
 
     # load y
-    audacity.load_track(transition['y'], end=y_end, track=i + 1, offset=transition['offset'])
+    audacity.load_track(
+      transition['y'],
+      start=transition['y_offset'],
+      end=y_end,
+      track=i + 1
+    )
 
 
+  audacity.align_tracks_end_to_end(len(transitions) + 1)
   audacity.close_pipes()
 
+
+def main():
+  # TODO: ensure audacity is running first?
+  print(f'PYTHON EXPORT PLAYLIST_PATH: {PLAYLIST_PATH}')
+
+  # find .m3u
+  try:
+    m3u_file = [f for f in listdir(PLAYLIST_PATH) if Path(f).suffix == '.m3u'][0]
+    print(f'Found m3u file: {m3u_file}')
+  except:
+    raise Exception('{DOCKER_AUDIO_PATH} should contain a .m3u file')
+
+  # parse audio files from .m3u
+  m3u_path = join(PLAYLIST_PATH, m3u_file)
+  m3u_lines = open(m3u_path, 'r').read().split('\n')
+  audio_files = [join(PLAYLIST_PATH, basename(f)) for f in m3u_lines if f]
+
+  # collect audio files into transition pairs
+  transitions = []
+  for i in range(len(audio_files) - 1):
+    x = audio_files[i]
+    y = audio_files[i + 1]
+    transitions.append({ 'x': x, 'y': y })
+
+  # sync transition pairs in panako
+  # transitions = transitions[:1]
+  for transition in transitions:
+    x_offset, y_offset = sync_pair(transition['x'], transition['y'])
+    transition['x_offset'] = x_offset
+    transition['y_offset'] = y_offset
+
+  # add synced transitions to audacity project
+  add_transitions_to_audacity(transitions)
 
 def sync_pair(x, y):
   print('\nSyncing pair: ')
@@ -62,51 +104,31 @@ def sync_pair(x, y):
   if stderr:
     raise Exception(stderr)
 
-  # parse offset from stdout
   if stdout.find('No alignment found') != -1:
     print('NO ALIGNMENT FOUND')
-    return 0
-  else:
-    start_string = 'with an offset of '
-    start_index = stdout.find(start_string) + len(start_string)
-    end_string = 's ('
-    end_index = stdout.find(end_string, start_index)
-    offset = stdout[start_index:end_index]
-    print(f'offset: {offset}')
-    return float(offset)
+    return 0, 0
 
+  print(stdout)
 
-def main():
-  # TODO: ensure audacity is running first?
-  print(f'PYTHON EXPORT PLAYLIST_PATH: {PLAYLIST_PATH}')
+  # parse x_offset
+  start_string = f'{basename(x)} ['
+  start_index = stdout.find(start_string) + len(start_string)
+  end_string = 's - '
+  end_index = stdout.find(end_string, start_index)
+  x_offset = stdout[start_index:end_index]
+  print(f'x_offset: {x_offset}')
 
-  # find .m3u
-  try:
-    m3u_file = [f for f in listdir(PLAYLIST_PATH) if Path(f).suffix == '.m3u'][0]
-    print(f'Found m3u file: {m3u_file}')
-  except:
-    raise Exception('{DOCKER_AUDIO_PATH} should contain a .m3u file')
+  # parse y_offset
+  start_string = f'{basename(y)} ['
+  start_index = stdout.find(start_string) + len(start_string)
+  end_string = 's - '
+  end_index = stdout.find(end_string, start_index)
+  y_offset = stdout[start_index:end_index]
+  print(f'y_offset: {y_offset}')
 
-  # parse audio files from .m3u
-  m3u_path = join(PLAYLIST_PATH, m3u_file)
-  m3u_lines = open(m3u_path, 'r').read().split('\n')
-  audio_files = [join(PLAYLIST_PATH, basename(f)) for f in m3u_lines if f]
-
-  # collect audio files into transition pairs
-  transitions = []
-  for i in range(len(audio_files) - 1):
-    x = audio_files[i]
-    y = audio_files[i + 1]
-    transitions.append({ 'x': x, 'y': y, 'offset': math.inf })
-
-  # sync transition pairs in panako
-  transitions = transitions[:1]
-  for transition in transitions:
-    transition['offset'] = sync_pair(transition['x'], transition['y'])
-
-  # add synced transitions to audacity project
-  add_transitions_to_audacity(transitions)
+  return float(x_offset), float(y_offset)
 
 
 if __name__ == '__main__':
   main()
+

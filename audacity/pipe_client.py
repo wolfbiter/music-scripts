@@ -8,10 +8,9 @@ TOFILE = None
 FROMFILE = None
 EOL = None
 
-def load_track(filename, start=0, end=None, track=None, offset=0):
+def load_track(filename, start=0, end=None, track=None):
   assert track != None
   assert end != None
-  print('TRACK', track)
   do( f'Import2: Filename="{filename}"' )
 
   # reset cursor to start of track
@@ -23,11 +22,13 @@ def load_track(filename, start=0, end=None, track=None, offset=0):
   endString = f'End={end}'
   do( f'Select: {startString} {endString} {trackString}')
   do( 'Trim' )
-
-  # move new clip to offset
-  do( f'SetClip: Clip={start} Start={offset}')
+  
   do( 'FitInWindow' )
 
+
+def align_tracks_end_to_end(track_count):
+  do( f'SelectTracks: TrackCount={track_count}')
+  do( 'Align_EndToEnd' )
 
 def send_command(command):
   """Send a single command."""
