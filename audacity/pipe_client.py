@@ -13,21 +13,18 @@ def load_track(filename, start=0, end=None, track=None):
   assert end != None
   do( f'Import2: Filename="{filename}"' )
 
-  # reset cursor to start of track
-  trackString = f'Track={track}'
-  do( f'Select: Start=0 End=0 {trackString}')
-
   # trim track to start / end
+  trackString = f'Track={track}'
   startString = f'Start={start}' if start != None else ''
   endString = f'End={end}'
   do( f'Select: {startString} {endString} {trackString}')
   do( 'Trim' )
-  
+
   do( 'FitInWindow' )
 
 
-def align_tracks_end_to_end(track_count):
-  do( f'SelectTracks: TrackCount={track_count}')
+def align_tracks_end_to_end(track=0, track_count=0):
+  do( f'SelectTracks: Track={track} TrackCount={track_count}')
   do( 'Align_EndToEnd' )
 
 def send_command(command):

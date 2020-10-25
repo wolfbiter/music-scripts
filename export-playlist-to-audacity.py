@@ -16,7 +16,6 @@ DOCKER_AUDIO_PATH = '/home/audioinput'
 DOCKER_WORKING_DIRECTORY = '/Users/kane/projects/docker-panako'
 DOCKER_COMMAND = f'docker run -i --volume {PLAYLIST_PATH}:{DOCKER_AUDIO_PATH} --rm panako bash'
 
-
 def add_transitions_to_audacity(transitions):
   for i, transition in enumerate(transitions):
     print('add_transition_to_audacity', transition)
@@ -36,15 +35,25 @@ def add_transitions_to_audacity(transitions):
       y_end = next_transition['x_offset']
 
     # load y
+    y_start = transition['y_offset']
+    if y_end <= y_start:
+      print('error with y_start and y_end: ', y_start, y_end)
+      y_start = 0
+      y_end = 1000
     audacity.load_track(
       transition['y'],
-      start=transition['y_offset'],
+      start=y_start,
       end=y_end,
       track=i + 1
     )
 
+    # line up tracks
+    audacity.align_tracks_end_to_end(track=i, track_count=2)
 
-  audacity.align_tracks_end_to_end(len(transitions) + 1)
+    # confirm correct before proceeding
+    user_input = input("Press enter to proceed when ready")
+
+
   audacity.close_pipes()
 
 
@@ -72,7 +81,7 @@ def main():
     transitions.append({ 'x': x, 'y': y })
 
   # sync transition pairs in panako
-  # transitions = transitions[:1]
+  transitions = transitions[:10]
   for transition in transitions:
     x_offset, y_offset = sync_pair(transition['x'], transition['y'])
     transition['x_offset'] = x_offset
@@ -119,6 +128,14 @@ def sync_pair(x, y):
   print(f'x_offset: {x_offset}')
 
   # parse y_offset
+  start_string = f'{basename(y)} ['
+  start_index = stdout.find(start_string) + len(start_string)
+  end_string = 's - '
+  end_index = stdout.find(end_string, start_index)
+  y_offset = stdout[start_index:end_index]
+  print(f'y_offset: {y_offset}')
+
+  # parse offset
   start_string = f'{basename(y)} ['
   start_index = stdout.find(start_string) + len(start_string)
   end_string = 's - '
