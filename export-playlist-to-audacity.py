@@ -24,7 +24,7 @@ def add_transitions_to_audacity(transitions):
 
     # only load x for first transition
     if i == 0:
-      audacity.load_track(transition['x'], start=0, end=transition['offset'], track=i)
+      audacity.load_track(transition['x'], end=transition['offset'], track=i)
 
     # get y_end from next transition's offset
     y_end = 100
@@ -33,7 +33,8 @@ def add_transitions_to_audacity(transitions):
       y_end = next_transition['offset']
 
     # load y
-    audacity.load_track(transition['y'], start=transition['offset'], end=y_end, track=i)
+    audacity.load_track(transition['y'], end=y_end, track=i + 1, offset=transition['offset'])
+
 
   audacity.close_pipes()
 
