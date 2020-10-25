@@ -9,9 +9,8 @@ printf "STARTING SCRIPT: $(basename "$0") || CURRENT TIME: %s\n" "$(date)"
 cd "$(dirname "$0")"
 source ./venv/bin/activate
 
-# parse args
-: ${1?' You forgot to supply a PLAYLIST_FILE_PATH'}
+# parse optional arg
 PLAYLIST_FILE_PATH=$1
 
 # import the csv file to json
-python ./export-playlist-to-audacity.py $PLAYLIST_FILE_PATH
+python ./export-playlist-to-audacity.py "$PLAYLIST_FILE_PATH"
