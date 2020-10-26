@@ -9,18 +9,13 @@ FROMFILE = None
 EOL = None
 
 def load_track(filename, start=0, end=None, track=None):
-  assert track != None
-  assert end != None
   do( f'Import2: Filename="{filename}"' )
 
-  # trim track to start / end
-  trackString = f'Track={track}'
-  startString = f'Start={start}' if start != None else ''
-  endString = f'End={end}'
-  do( f'Select: {startString} {endString} {trackString}')
-  do( 'Trim' )
-
-  do( 'FitInWindow' )
+  # optionally trim track to start / end
+  if start != None and end != None and track != None:
+    do( f'Select: Start={start} End={end} Track={track}')
+    do( 'Trim' )
+    do( 'FitInWindow' )
 
 
 def align_tracks_end_to_end(track=0, track_count=0):
