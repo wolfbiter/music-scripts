@@ -22,6 +22,23 @@ def align_tracks_end_to_end(track=0, track_count=0):
   do( f'SelectTracks: Track={track} TrackCount={track_count}')
   do( 'Align_EndToEnd' )
 
+
+def zoom_to_transition(track):
+  do( 'ZoomNormal' )
+  do( f'Select: Track={track}' )
+
+  # jump to 30s before start of track
+  do( 'CursTrackStart' )
+  do( 'SelectNone' )
+  do( 'CursorLongJumpLeft' )
+  do( 'CursorLongJumpLeft' )
+
+  # then select to end of track, and zoom
+  do( f'Select: Track={track}' )
+  do( 'SelCursorToTrackEnd' )
+  do( 'ZoomSel' )
+
+
 def send_command(command):
   """Send a single command."""
   global TOFILE

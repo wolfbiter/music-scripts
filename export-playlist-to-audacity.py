@@ -80,6 +80,7 @@ def add_transitions_to_audacity(transitions):
     )
 
     # confirm correct before proceeding
+    audacity.zoom_to_transition(track - 1)
     user_input = input('Press enter to proceed when ready…')
 
   audacity.close_pipes()
@@ -109,7 +110,7 @@ def main():
     transitions.append({ 'x': x, 'y': y })
 
   # sync transition pairs in panako
-  transitions = transitions[:5]
+  # transitions = transitions[:10]
   for transition in transitions:
     x_offset, y_offset = sync_pair(transition['x'], transition['y'])
     transition['x_offset'] = x_offset
