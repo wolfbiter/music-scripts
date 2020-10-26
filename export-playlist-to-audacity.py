@@ -4,6 +4,9 @@ import subprocess
 from os import listdir
 from os.path import isfile, join, basename
 from pathlib import Path
+from datetime import datetime
+
+import untangle
 
 import audacity.pipe_client as audacity
 
@@ -23,8 +26,8 @@ def add_transitions_to_audacity(transitions):
     x_offset = transition['x_offset']
     y_offset = transition['y_offset']
     print('\nadd_transition:')
-    print(f'x: {basename(transition["x"])}')
-    print(f'y: {basename(transition["y"])}')
+    print(f'x: {basename(transition["x"]["absolute_path"])}')
+    print(f'y: {basename(transition["y"]["absolute_path"])}')
     print(f'x_offset: {x_offset}')
     print(f'y_offset: {y_offset}')
 
@@ -87,32 +90,39 @@ def add_transitions_to_audacity(transitions):
 
 
 def main():
-  # TODO: ensure audacity is running first?
   print(f'PYTHON EXPORT PLAYLIST_PATH: {PLAYLIST_PATH}')
 
-  # find .m3u
+  # find .nml
   try:
-    m3u_file = [f for f in listdir(PLAYLIST_PATH) if Path(f).suffix == '.m3u'][0]
-    print(f'Found m3u file: {m3u_file}')
+    nml_file = [f for f in listdir(PLAYLIST_PATH) if Path(f).suffix == '.nml'][0]
+    print(f'Found nml file: {nml_file}')
   except:
-    raise Exception('{DOCKER_AUDIO_PATH} should contain a .m3u file')
+    raise Exception('{DOCKER_AUDIO_PATH} should contain a .nml file')
 
-  # parse audio files from .m3u
-  m3u_path = join(PLAYLIST_PATH, m3u_file)
-  m3u_lines = open(m3u_path, 'r').read().split('\n')
-  audio_files = [join(PLAYLIST_PATH, basename(f)) for f in m3u_lines if f]
+  # parse audio files from .nml
+  nml_path = join(PLAYLIST_PATH, nml_file)
+  nml_dict = untangle.parse(nml_path)
+  entries = nml_dict.NML.COLLECTION.ENTRY
+  audio_objects = [{
+    'absolute_path': join(PLAYLIST_PATH, e.LOCATION['FILE']),
+    'auto_gain': e.LOUDNESS['PERCEIVED_DB'],
+    'is_transition': _is_transition(e)
+  } for e in entries]
 
-  # collect audio files into transition pairs
+  # collect audio_objects into transition pairs
   transitions = []
-  for i in range(len(audio_files) - 1):
-    x = audio_files[i]
-    y = audio_files[i + 1]
+  for i in range(len(audio_objects) - 1):
+    x = audio_objects[i]
+    y = audio_objects[i + 1]
     transitions.append({ 'x': x, 'y': y })
 
   # sync transition pairs in panako
-  # transitions = transitions[:10]
+  transitions = transitions[:5]
   for transition in transitions:
-    x_offset, y_offset = sync_pair(transition['x'], transition['y'])
+    x_offset, y_offset = sync_pair(
+      transition['x']['absolute_path'],
+      transition['y']['absolute_path']
+    )
     transition['x_offset'] = x_offset
     transition['y_offset'] = y_offset
 
@@ -175,6 +185,14 @@ def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
   return float(x_offset), float(y_offset)
 
 
+def _is_transition(entry):
+  # if title is in this date format, it's probably a traktor recording
+  try:
+    datetime.strptime(entry['TITLE'], '%Y-%m-%d_%Hh%Mm%S')
+    return True
+  except Exception as e:
+    return False
+
+
 if __name__ == '__main__':
   main()
-
