@@ -3,6 +3,7 @@
 
 import os
 import sys
+import json
 
 TOFILE = None
 FROMFILE = None
@@ -21,7 +22,6 @@ def load_track(audio_object, start=0, end=None, track=None):
   if start != None and end != None and track != None:
     do( f'Select: Start={start} End={end} Track={track}')
     do( 'Trim' )
-    do( 'FitInWindow' )
 
 
 def align_tracks_end_to_end(track=0, track_count=0):
@@ -30,7 +30,6 @@ def align_tracks_end_to_end(track=0, track_count=0):
 
 
 def zoom_to_transition(track):
-  do( 'ZoomNormal' )
   do( f'Select: Track={track}' )
 
   # jump to 30s before start of track
@@ -45,16 +44,19 @@ def zoom_to_transition(track):
   do( 'ZoomSel' )
 
 
+def get_tracks_info():
+  tracks_info_string = do( 'GetInfo: Type=Tracks' ) or ''
+  end_index = tracks_info_string.find('BatchCommand finished:')
+  return json.loads(tracks_info_string[0:end_index])
+
+
 def send_command(command):
   """Send a single command."""
-  global TOFILE
-  global EOL
   TOFILE.write(command + EOL)
   TOFILE.flush()
 
 def get_response():
   """Return the command response."""
-  global FROMFILE
   result = ''
   line = ''
   while True:
@@ -62,7 +64,7 @@ def get_response():
     line = FROMFILE.readline()
     if line == '\n' and len(result) > 0:
       break
-      return result
+  return result
 
 def do_command(command):
   """Send one command, and return the response."""
@@ -70,11 +72,10 @@ def do_command(command):
   # print("Send: >>> \n"+command)
   send_command(command)
   response = get_response()
-  # print("Rcvd: <<< \n" + response)
   return response
 
 def do(command):
-  do_command(command)
+  return do_command(command)
 
 def assert_pipes():
   if not (TOFILE and FROMFILE):

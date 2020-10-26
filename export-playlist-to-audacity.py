@@ -20,71 +20,87 @@ DOCKER_WORKING_DIRECTORY = '/Users/kane/projects/docker-panako'
 DOCKER_COMMAND = f'docker run -i --volume {PLAYLIST_PATH}:{DOCKER_AUDIO_PATH} --rm panako bash'
 
 def add_transitions_to_audacity(transitions):
-  track = 0
   for i, transition in enumerate(transitions):
-    tracks_created = 0
+    tracks_info = audacity.get_tracks_info()
+    next_track = len(tracks_info)
     x_offset = transition['x_offset']
     y_offset = transition['y_offset']
-    print('\nadd_transition:')
+
+    # prompt user if they want to add transition
+    print(f'\nTransition {i + 1}')
     print(f'x: {basename(transition["x"]["absolute_path"])}')
     print(f'y: {basename(transition["y"]["absolute_path"])}')
     print(f'x_offset: {x_offset}')
     print(f'y_offset: {y_offset}')
+
+    # compute y_start and y_end
+    y_start = y_offset or 0
+    if i != len(transitions) - 1:
+      next_transition = transitions[i + 1]
+      y_end = next_transition['x_offset']
+    y_end = 1000 if y_end == None else y_end
+    if y_start >= y_end:
+      print('WARNING y_start >= y_end')
+      print(f'y_start: {y_start}')
+      print(f'y_end: {y_end}')
+
+    # pause to collect user input
+    audacity.zoom_to_transition(max(next_track - 1, 0))
+    should_add_transition = None
+    while should_add_transition == None:
+      user_input = input('Would you like to add this transition? (y/n): ').lower().strip()
+      if user_input == 'y':
+        should_add_transition = True
+      elif user_input == 'n':
+        should_add_transition = False
+
+    # proceed to next iteration if we are not adding tracks
+    if not should_add_transition:
+      print('NOT ADDING TRANSITION')
+      continue
+    else:
+      print('ADDING TRANSITION')
 
     # only load x for first transition
     if i == 0:
       audacity.load_track(
         transition['x'],
         end=x_offset,
-        track=track
+        track=next_track
       )
-      track += 1
-      tracks_created += 1
+      next_track += 1
 
-    # get y_end from next transition's offset
-    if i != len(transitions) - 1:
-      next_transition = transitions[i + 1]
-      y_end = next_transition['x_offset']
-    y_end = 1000 if y_end == None else y_end
-
-    # load y
-    y_start = transition['y_offset'] or 0
+    # load y. if overlap issue, load two copies of y
     if y_end <= y_start:
-      print('error with y_start and y_end: ', y_start, y_end)
       audacity.load_track(
         transition['y'],
         start=y_start,
         end=1000,
-        track=track
+        track=next_track
       )
-      track += 1
-      tracks_created += 1
+      next_track += 1
       audacity.load_track(
         transition['y'],
         end=y_end,
-        track=track
+        track=next_track
       )
-      track += 1
-      tracks_created += 1
+      next_track += 1
     else:
       audacity.load_track(
         transition['y'],
         start=y_start,
         end=y_end,
-        track=track
+        track=next_track
       )
-      track += 1
-      tracks_created += 1
+      next_track += 1
 
     # line up new tracks
+    new_tracks_info = audacity.get_tracks_info()
+    tracks_created = len(new_tracks_info) - len(tracks_info)
     audacity.align_tracks_end_to_end(
-      track=max(track - tracks_created - 1, 0),
+      track=max(next_track - tracks_created - 1, 0),
       track_count=tracks_created + 1
     )
-
-    # confirm correct before proceeding
-    audacity.zoom_to_transition(track - 1)
-    user_input = input('Press enter to proceed when ready…')
 
   audacity.close_pipes()
 
@@ -117,7 +133,7 @@ def main():
     transitions.append({ 'x': x, 'y': y })
 
   # sync transition pairs in panako
-  transitions = transitions[:7]
+  # transitions = transitions[:3]
   for transition in transitions:
     x_offset, y_offset = sync_pair(
       transition['x']['absolute_path'],
