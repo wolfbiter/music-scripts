@@ -106,7 +106,7 @@ def main():
   audio_objects = [{
     'absolute_path': join(PLAYLIST_PATH, e.LOCATION['FILE']),
     'auto_gain': e.LOUDNESS['PERCEIVED_DB'],
-    'is_transition': _is_transition(e)
+    'is_recorded_mix': _is_recorded_mix(e)
   } for e in entries]
 
   # collect audio_objects into transition pairs
@@ -117,7 +117,7 @@ def main():
     transitions.append({ 'x': x, 'y': y })
 
   # sync transition pairs in panako
-  transitions = transitions[:5]
+  transitions = transitions[:7]
   for transition in transitions:
     x_offset, y_offset = sync_pair(
       transition['x']['absolute_path'],
@@ -185,7 +185,7 @@ def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
   return float(x_offset), float(y_offset)
 
 
-def _is_transition(entry):
+def _is_recorded_mix(entry):
   # if title is in this date format, it's probably a traktor recording
   try:
     datetime.strptime(entry['TITLE'], '%Y-%m-%d_%Hh%Mm%S')

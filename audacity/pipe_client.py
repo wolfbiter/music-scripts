@@ -12,8 +12,8 @@ def load_track(audio_object, start=0, end=None, track=None):
   filename = audio_object['absolute_path']
   do( f'Import2: Filename="{filename}"' )
 
-  # set auto gain for non-transition files
-  if not audio_object['is_transition']:
+  # set auto gain for original files (dont adjust post-mix files)
+  if not audio_object['is_recorded_mix']:
     do( f'SelectTracks: Track={track}')
     do( f'SetTrackAudio: Gain={audio_object["auto_gain"]}' )
 
