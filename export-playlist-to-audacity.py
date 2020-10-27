@@ -19,17 +19,14 @@ DOCKER_AUDIO_PATH = '/home/audioinput'
 DOCKER_WORKING_DIRECTORY = '/Users/kane/projects/docker-panako'
 DOCKER_COMMAND = f'docker run -i --volume {PLAYLIST_PATH}:{DOCKER_AUDIO_PATH} --rm panako bash'
 
-TRANSITION_START_INDEX = 7
+TRANSITION_START_INDEX = 0
 TRANSITION_END_INDEX = -1 # -1 for last element in array
 
 def add_transitions_to_audacity(transitions):
   for i, transition in enumerate(transitions):
-    tracks_info = audacity.get_tracks_info()
-    next_track = len(tracks_info)
     x_offset = transition['x_offset']
     y_offset = transition['y_offset']
 
-    # prompt user if they want to add transition
     print(f'\nTransition {i + 1} | i = {i}')
     print(f'x: {basename(transition["x"]["absolute_path"])}')
     print(f'y: {basename(transition["y"]["absolute_path"])}')
@@ -47,8 +44,10 @@ def add_transitions_to_audacity(transitions):
       print(f'y_start: {y_start}')
       print(f'y_end: {y_end}')
 
-    # pause to collect user input
-    audacity.zoom_to_transition(max(next_track - 1, 0))
+    # prompt user if they want to add this transition
+    tracks_info = audacity.get_tracks_info()
+    next_track = len(tracks_info)
+    audacity.zoom_to_transition(next_track - 1)
     should_add_transition = None
     while should_add_transition == None:
       user_input = input('Would you like to add this transition? (y/n): ').lower().strip()
@@ -56,6 +55,9 @@ def add_transitions_to_audacity(transitions):
         should_add_transition = True
       elif user_input == 'n':
         should_add_transition = False
+    tracks_info = audacity.get_tracks_info()
+    next_track = len(tracks_info)
+    audacity.zoom_to_transition(next_track - 1)
 
     # proceed to next iteration if we are not adding tracks
     if not should_add_transition:
@@ -104,6 +106,11 @@ def add_transitions_to_audacity(transitions):
       track=max(next_track - tracks_created - 1, 0),
       track_count=tracks_created + 1
     )
+
+    # if last transition, focus
+    if i == len(transitions) - 1:
+      audacity.zoom_to_transition(next_track - 1)
+
 
   audacity.close_pipes()
 

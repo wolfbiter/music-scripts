@@ -29,7 +29,8 @@ def align_tracks_end_to_end(track=0, track_count=0):
   do( 'Align_EndToEnd' )
 
 
-def zoom_to_transition(track):
+def zoom_to_transition(track = 0):
+  track = max(track, 0)
   do( f'Select: Track={track}' )
 
   # jump to 30s before start of track
