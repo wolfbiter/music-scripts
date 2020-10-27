@@ -19,15 +19,15 @@ DOCKER_AUDIO_PATH = '/home/audioinput'
 DOCKER_WORKING_DIRECTORY = '/Users/kane/projects/docker-panako'
 DOCKER_COMMAND = f'docker run -i --volume {PLAYLIST_PATH}:{DOCKER_AUDIO_PATH} --rm panako bash'
 
-TRANSITION_START_INDEX = 0
-TRANSITION_END_INDEX = -1 # -1 for last element in array
+TRANSITION_START_INDEX = 1 - 1 # subtract 1 for 0 index
+TRANSITION_END_INDEX = None # None for last element in array
 
 def add_transitions_to_audacity(transitions):
   for i, transition in enumerate(transitions):
     x_offset = transition['x_offset']
     y_offset = transition['y_offset']
 
-    print(f'\nTransition {i + 1} | i = {i}')
+    print(f'\nTransition {i + 1 + TRANSITION_START_INDEX}/{len(transitions) + TRANSITION_START_INDEX}')
     print(f'x: {basename(transition["x"]["absolute_path"])}')
     print(f'y: {basename(transition["y"]["absolute_path"])}')
     print(f'x_offset: {x_offset}')
@@ -144,7 +144,8 @@ def main():
 
   # sync transition pairs in panako
   transitions = transitions[TRANSITION_START_INDEX:TRANSITION_END_INDEX]
-  for transition in transitions:
+  for i, transition in enumerate(transitions):
+    print(f'\n{i + 1 + TRANSITION_START_INDEX}/{len(transitions) + TRANSITION_START_INDEX}')
     x_offset, y_offset = sync_pair(
       transition['x']['absolute_path'],
       transition['y']['absolute_path']
@@ -156,7 +157,7 @@ def main():
   add_transitions_to_audacity(transitions)
 
 def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
-  print('\nSyncing pair: ')
+  print('Syncing pair: ')
   print(basename(x))
   print(basename(y))
 
