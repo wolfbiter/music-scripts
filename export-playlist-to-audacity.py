@@ -7,6 +7,9 @@ from pathlib import Path
 from datetime import datetime
 
 import untangle
+import librosa
+import pyrubberband
+import soundfile
 
 import audacity.pipe_client as audacity
 
@@ -19,8 +22,8 @@ DOCKER_AUDIO_PATH = '/home/audioinput'
 DOCKER_WORKING_DIRECTORY = '/Users/kane/projects/docker-panako'
 DOCKER_COMMAND = f'docker run -i --volume {PLAYLIST_PATH}:{DOCKER_AUDIO_PATH} --rm panako bash'
 
-TRANSITION_START_INDEX = 6 - 1 # subtract 1 for 0 index
-TRANSITION_END_INDEX = 15 # None for last element in array
+TRANSITION_START_INDEX = 15 - 1 # subtract 1 for 0 index
+TRANSITION_END_INDEX = 25 # None for last element in array
 
 def add_transitions_to_audacity(transitions):
 
@@ -68,6 +71,7 @@ def add_transitions_to_audacity(transitions):
 
     # proceed to next iteration if we are not adding tracks
     if not should_add_transition:
+      i += 1
       continue
 
     # refresh info in case user modified during input step
@@ -135,22 +139,8 @@ def add_transitions_to_audacity(transitions):
 def main():
   print(f'PYTHON EXPORT PLAYLIST_PATH: {PLAYLIST_PATH}')
 
-  # find .nml
-  try:
-    nml_file = [f for f in listdir(PLAYLIST_PATH) if Path(f).suffix == '.nml'][0]
-    print(f'Found nml file: {nml_file}')
-  except:
-    raise Exception('{DOCKER_AUDIO_PATH} should contain a .nml file')
-
-  # parse audio files from .nml
-  nml_path = join(PLAYLIST_PATH, nml_file)
-  nml_dict = untangle.parse(nml_path)
-  entries = nml_dict.NML.COLLECTION.ENTRY
-  audio_objects = [{
-    'absolute_path': join(PLAYLIST_PATH, e.LOCATION['FILE']),
-    'auto_gain': e.LOUDNESS['PERCEIVED_DB'],
-    'is_recorded_mix': _is_recorded_mix(e)
-  } for e in entries]
+  # parse audio objects from playlist
+  audio_objects = parse_playlist(PLAYLIST_PATH)
 
   # collect audio_objects into transition pairs
   transitions = []
@@ -163,10 +153,9 @@ def main():
   transitions = transitions[TRANSITION_START_INDEX:TRANSITION_END_INDEX]
   for i, transition in enumerate(transitions):
     print(f'\n{i + 1 + TRANSITION_START_INDEX}/{len(transitions) + TRANSITION_START_INDEX}')
-    x_offset, y_offset, offset = sync_pair(
-      transition['x']['absolute_path'],
-      transition['y']['absolute_path']
-    )
+    xPath = transition['x']['shifted_path'] or transition['x']['absolute_path']
+    yPath = transition['y']['shifted_path'] or transition['y']['absolute_path']
+    x_offset, y_offset, offset = sync_pair(xPath, yPath)
     transition['x_offset'] = x_offset
     transition['y_offset'] = y_offset
     transition['offset'] = offset
@@ -229,6 +218,69 @@ def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
 
   return float(x_offset), float(y_offset), float(offset)
 
+
+def parse_playlist(playlist):
+  try:
+    nml_file = [f for f in listdir(PLAYLIST_PATH) if Path(f).suffix == '.nml'][0]
+    print(f'Found nml file: {nml_file}')
+  except:
+    raise Exception('{DOCKER_AUDIO_PATH} should contain a .nml file')
+
+  # parse audio objects from .nml
+  nml_path = join(PLAYLIST_PATH, nml_file)
+  nml_dict = untangle.parse(nml_path)
+  entries = nml_dict.NML.COLLECTION.ENTRY
+  audio_objects = [{
+    'file': e.LOCATION['FILE'],
+    'absolute_path': join(PLAYLIST_PATH, e.LOCATION['FILE']),
+    'auto_gain': e.LOUDNESS['PERCEIVED_DB'],
+    'pitch_semitones': _get_pitch_semitones(e),
+    'is_recorded_mix': _is_recorded_mix(e)
+  } for e in entries]
+
+  # pitch-shift audio files where needed
+  for audio_object in audio_objects:
+    audio_object['shifted_path'] = _get_shifted_path(audio_object)
+
+  return audio_objects
+
+
+def _get_shifted_path(audio_object):
+  # pitch shift audio as needed
+  pitch_semitones = audio_object['pitch_semitones']
+  file = audio_object['file']
+  if not pitch_semitones:
+    return ''
+
+  shifted_file = f'PITCH SHIFTED {pitch_semitones}: {Path(file).stem}.wav'
+  shifted_path = join(PLAYLIST_PATH, shifted_file)
+
+  # create new pitch shifted file if not exists
+  if not Path(shifted_path).is_file():
+
+    print('loading file to shift: ', pitch_semitones, file)
+    y, sr = librosa.load(audio_object['absolute_path'])
+    print('loaded file, SHAPE: ', y.shape)
+    print('shifting wave')
+    y_shift = pyrubberband.pitch_shift(y, sr, pitch_semitones)
+    print('shifted wave')
+    print('wri1ting last wave')
+    soundfile.write(shifted_path, y, sr)
+    print('wrote last wave')
+  else:
+    print('CACHED SHIFT', file, pitch_semitones)
+
+  return shifted_path
+
+
+def _get_pitch_semitones(entry):
+  # 'rating' is weirdly 'comment2' in traktor
+  # if rating is an integer, interpret as pitch shift
+  try:
+    rating = entry.INFO['RATING']
+    return int(rating)
+  except:
+    return 0
 
 def _is_recorded_mix(entry):
   # if title is in this date format, it's probably a traktor recording
