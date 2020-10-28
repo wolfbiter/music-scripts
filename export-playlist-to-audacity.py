@@ -19,30 +19,21 @@ DOCKER_AUDIO_PATH = '/home/audioinput'
 DOCKER_WORKING_DIRECTORY = '/Users/kane/projects/docker-panako'
 DOCKER_COMMAND = f'docker run -i --volume {PLAYLIST_PATH}:{DOCKER_AUDIO_PATH} --rm panako bash'
 
-TRANSITION_START_INDEX = 1 - 1 # subtract 1 for 0 index
-TRANSITION_END_INDEX = 5 # None for last element in array
+TRANSITION_START_INDEX = 6 - 1 # subtract 1 for 0 index
+TRANSITION_END_INDEX = 15 # None for last element in array
 
 def add_transitions_to_audacity(transitions):
 
   # start by zooming to last transition if any
   audacity.zoom_to_transition(len(audacity.get_tracks_info()) - 1)
 
-  i = -1
+  i = 0
   while i < len(transitions):
-    i += 1
     transition = transitions[i]
     x_offset = transition['x_offset']
     y_offset = transition['y_offset']
     offset = transition['offset'] or 0
 
-    print(f'\nTransition {i + 1 + TRANSITION_START_INDEX}/{len(transitions) + TRANSITION_START_INDEX}')
-    print(f'x: {basename(transition["x"]["absolute_path"])}')
-    print(f'y: {basename(transition["y"]["absolute_path"])}')
-    print(f'x_offset: {x_offset}')
-    print(f'y_offset: {y_offset}')
-    print(f'offset: {offset}')
-
-    # compute y_start and y_end
     y_start = y_offset or 0
     if i != len(transitions) - 1:
       next_transition = transitions[i + 1]
@@ -50,8 +41,15 @@ def add_transitions_to_audacity(transitions):
     y_end = 1000 if y_end == None else y_end
     if y_start >= y_end:
       print('WARNING y_start >= y_end')
-      print(f'y_start: {y_start}')
-      print(f'y_end: {y_end}')
+
+    print(f'\nTransition {i + 1 + TRANSITION_START_INDEX}/{len(transitions) + TRANSITION_START_INDEX}')
+    print(f'x: {basename(transition["x"]["absolute_path"])}')
+    print(f'y: {basename(transition["y"]["absolute_path"])}')
+    print(f'x_offset: {x_offset}')
+    print(f'y_offset: {y_offset}')
+    print(f'offset: {offset}')
+    print(f'y_start: {y_start}')
+    print(f'y_end: {y_end}')
 
     # prompt user if they want to add this transition
     should_add_transition = None
@@ -78,16 +76,6 @@ def add_transitions_to_audacity(transitions):
 
     # only load x for first transition
     if next_track == 0:
-
-      # create duplicate with overlap for clarity
-      if x_offset != None:
-        audacity.load_track(
-          transition['x'],
-          track=next_track
-        )
-        audacity.mute_track(track=next_track)
-        next_track += 1
-
       audacity.load_track(
         transition['x'],
         track=next_track
@@ -121,6 +109,11 @@ def add_transitions_to_audacity(transitions):
         transition['y'],
         track=next_track
       )
+      audacity.trim_track(
+        start=0,
+        end=y_end,
+        track=next_track
+      )
       audacity.move_clip(
         at=0,
         start=prev_track_info['start'] - y_offset,
@@ -133,6 +126,8 @@ def add_transitions_to_audacity(transitions):
       audacity.zoom_to_transition(next_track - 2)
     else:
       audacity.zoom_to_transition(next_track - 1)
+
+    i += 1
 
   audacity.close_pipes()
 
