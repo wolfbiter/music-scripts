@@ -20,18 +20,27 @@ DOCKER_WORKING_DIRECTORY = '/Users/kane/projects/docker-panako'
 DOCKER_COMMAND = f'docker run -i --volume {PLAYLIST_PATH}:{DOCKER_AUDIO_PATH} --rm panako bash'
 
 TRANSITION_START_INDEX = 1 - 1 # subtract 1 for 0 index
-TRANSITION_END_INDEX = None # None for last element in array
+TRANSITION_END_INDEX = 5 # None for last element in array
 
 def add_transitions_to_audacity(transitions):
-  for i, transition in enumerate(transitions):
+
+  # start by zooming to last transition if any
+  audacity.zoom_to_transition(len(audacity.get_tracks_info()) - 1)
+
+  i = -1
+  while i < len(transitions):
+    i += 1
+    transition = transitions[i]
     x_offset = transition['x_offset']
     y_offset = transition['y_offset']
+    offset = transition['offset'] or 0
 
     print(f'\nTransition {i + 1 + TRANSITION_START_INDEX}/{len(transitions) + TRANSITION_START_INDEX}')
     print(f'x: {basename(transition["x"]["absolute_path"])}')
     print(f'y: {basename(transition["y"]["absolute_path"])}')
     print(f'x_offset: {x_offset}')
     print(f'y_offset: {y_offset}')
+    print(f'offset: {offset}')
 
     # compute y_start and y_end
     y_start = y_offset or 0
@@ -45,72 +54,85 @@ def add_transitions_to_audacity(transitions):
       print(f'y_end: {y_end}')
 
     # prompt user if they want to add this transition
-    tracks_info = audacity.get_tracks_info()
-    next_track = len(tracks_info)
-    audacity.zoom_to_transition(next_track - 1)
     should_add_transition = None
     while should_add_transition == None:
-      user_input = input('Would you like to add this transition? (y/n): ').lower().strip()
+      user_input = input('Would you like to add this transition, or go back? (y/n/b): ').lower().strip()
       if user_input == 'y':
         should_add_transition = True
+        print('ADDING TRANSITION')
       elif user_input == 'n':
         should_add_transition = False
-    tracks_info = audacity.get_tracks_info()
-    next_track = len(tracks_info)
-    audacity.zoom_to_transition(next_track - 1)
+        print('NOT ADDING TRANSITION')
+      elif user_input == 'b':
+        should_add_transition = False
+        i -= (1 if i == 0 else 2)
+        print(f'GOING BACK')
 
     # proceed to next iteration if we are not adding tracks
     if not should_add_transition:
-      print('NOT ADDING TRANSITION')
       continue
-    else:
-      print('ADDING TRANSITION')
+
+    # refresh info in case user modified during input step
+    tracks_info = audacity.get_tracks_info()
+    next_track = len(tracks_info)
 
     # only load x for first transition
-    if i == 0 and TRANSITION_START_INDEX == 0:
+    if next_track == 0:
+
+      # create duplicate with overlap for clarity
+      if x_offset != None:
+        audacity.load_track(
+          transition['x'],
+          track=next_track
+        )
+        audacity.mute_track(track=next_track)
+        next_track += 1
+
       audacity.load_track(
         transition['x'],
+        track=next_track
+      )
+      audacity.trim_track(
         end=x_offset,
         track=next_track
       )
       next_track += 1
 
-    # load y. if overlap issue, load two copies of y
-    if y_end <= y_start:
-      audacity.load_track(
-        transition['y'],
-        start=y_start,
-        end=1000,
-        track=next_track
-      )
-      next_track += 1
-      audacity.load_track(
-        transition['y'],
-        end=y_end,
-        track=next_track
-      )
-      next_track += 1
-    else:
-      audacity.load_track(
-        transition['y'],
-        start=y_start,
-        end=y_end,
-        track=next_track
-      )
-      next_track += 1
-
-    # line up new tracks
-    new_tracks_info = audacity.get_tracks_info()
-    tracks_created = len(new_tracks_info) - len(tracks_info)
-    audacity.align_tracks_end_to_end(
-      track=max(next_track - tracks_created - 1, 0),
-      track_count=tracks_created + 1
+    # load y, line up transition and trim
+    audacity.load_track(
+      transition['y'],
+      track=next_track
     )
+    audacity.trim_track(
+      start=y_start,
+      end=y_end,
+      track=next_track
+    )
+    audacity.align_tracks_end_to_end(
+      track=next_track - 1,
+      track_count=2
+    )
+    next_track += 1
 
-    # if last transition, focus
-    if i == len(transitions) - 1:
+    # create duplicate with overlap for clarity
+    if y_offset != None:
+      prev_track_info = audacity.get_tracks_info()[next_track - 1]
+      audacity.load_track(
+        transition['y'],
+        track=next_track
+      )
+      audacity.move_clip(
+        at=0,
+        start=prev_track_info['start'] - y_offset,
+        track=next_track
+      )
+      audacity.mute_track(track=next_track)
+      next_track += 1
+
+      # focus newly made transition
+      audacity.zoom_to_transition(next_track - 2)
+    else:
       audacity.zoom_to_transition(next_track - 1)
-
 
   audacity.close_pipes()
 
@@ -146,12 +168,13 @@ def main():
   transitions = transitions[TRANSITION_START_INDEX:TRANSITION_END_INDEX]
   for i, transition in enumerate(transitions):
     print(f'\n{i + 1 + TRANSITION_START_INDEX}/{len(transitions) + TRANSITION_START_INDEX}')
-    x_offset, y_offset = sync_pair(
+    x_offset, y_offset, offset = sync_pair(
       transition['x']['absolute_path'],
       transition['y']['absolute_path']
     )
     transition['x_offset'] = x_offset
     transition['y_offset'] = y_offset
+    transition['offset'] = offset
 
   # add synced transitions to audacity project
   add_transitions_to_audacity(transitions)
@@ -181,7 +204,7 @@ def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
 
   if stdout.find('No alignment found') != -1:
     print('NO ALIGNMENT FOUND')
-    return None, None
+    return None, None, None
 
   print(stdout)
 
@@ -209,7 +232,7 @@ def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
   offset = stdout[start_index:end_index]
   print(f'offset: {offset}')
 
-  return float(x_offset), float(y_offset)
+  return float(x_offset), float(y_offset), float(offset)
 
 
 def _is_recorded_mix(entry):

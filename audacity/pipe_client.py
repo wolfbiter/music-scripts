@@ -9,8 +9,9 @@ TOFILE = None
 FROMFILE = None
 EOL = None
 
-def load_track(audio_object, start=0, end=None, track=None):
+def load_track(audio_object, track=None):
   filename = audio_object['absolute_path']
+  do( f'SelectTracks: Track={track} TrackCount=1')
   do( f'Import2: Filename="{filename}"' )
 
   # set auto gain for original files (dont adjust post-mix files)
@@ -18,15 +19,33 @@ def load_track(audio_object, start=0, end=None, track=None):
     do( f'SelectTracks: Track={track}')
     do( f'SetTrackAudio: Gain={audio_object["auto_gain"]}' )
 
-  # optionally trim track to start / end
+
+def trim_track(start=0, end=None, track=None):
   if start != None and end != None and track != None:
     do( f'Select: Start={start} End={end} Track={track}')
     do( 'Trim' )
 
 
+def move_clip(at=0, start=0, track=None):
+  if track != None:
+    do( f'SetClip: At={at} Track={track} Start={start}' )
+
+
 def align_tracks_end_to_end(track=0, track_count=0):
   do( f'SelectTracks: Track={track} TrackCount={track_count}')
   do( 'Align_EndToEnd' )
+
+
+def delete_track(track):
+  if track != None:
+    do( f'SelectTracks: Track={track} TrackCount=1')
+    do( f'RemoveTracks:' )
+
+
+def mute_track(track):
+  if track != None:
+    do( f'SelectTracks: Track={track} TrackCount=1')
+    do( f'MuteTracks:' )
 
 
 def zoom_to_transition(track = 0):
@@ -70,9 +89,10 @@ def get_response():
 def do_command(command):
   """Send one command, and return the response."""
   assert_pipes()
-  # print("Send: >>> \n"+command)
+  # print("Send: >>> \n" + command)
   send_command(command)
   response = get_response()
+  # print("Rcvd: <<< \n" + response)
   return response
 
 def do(command):
