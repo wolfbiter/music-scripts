@@ -5,6 +5,7 @@ from os import listdir
 from os.path import isfile, join, basename
 from pathlib import Path
 from datetime import datetime
+import concurrent.futures
 
 import untangle
 import librosa
@@ -80,6 +81,14 @@ def add_transitions_to_audacity(transitions):
 
     # only load x for first transition
     if next_track == 0:
+      # create duplicate with overlap for clarity
+      audacity.load_track(
+        transition['x'],
+        track=next_track
+      )
+      audacity.mute_track(track=next_track)
+      next_track += 1
+
       audacity.load_track(
         transition['x'],
         track=next_track
@@ -141,6 +150,7 @@ def main():
 
   # parse audio objects from playlist
   audio_objects = parse_playlist(PLAYLIST_PATH)
+  print('PARSED AUDIO OBJECTS FROM PLAYLIST\n')
 
   # collect audio_objects into transition pairs
   transitions = []
@@ -151,22 +161,32 @@ def main():
 
   # sync transition pairs in panako
   transitions = transitions[TRANSITION_START_INDEX:TRANSITION_END_INDEX]
-  for i, transition in enumerate(transitions):
-    print(f'\n{i + 1 + TRANSITION_START_INDEX}/{len(transitions) + TRANSITION_START_INDEX}')
-    xPath = transition['x']['shifted_path'] or transition['x']['absolute_path']
-    yPath = transition['y']['shifted_path'] or transition['y']['absolute_path']
-    x_offset, y_offset, offset = sync_pair(xPath, yPath)
-    transition['x_offset'] = x_offset
-    transition['y_offset'] = y_offset
-    transition['offset'] = offset
+  with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    executor.map(lambda t: _set_transition_offset(transitions, t), transitions)
 
   # add synced transitions to audacity project
   add_transitions_to_audacity(transitions)
 
+
+def _set_transition_offset(transitions, transition):
+  i = transitions.index(transition)
+  xPath = transition['x']['shifted_path'] or transition['x']['absolute_path']
+  yPath = transition['y']['shifted_path'] or transition['y']['absolute_path']
+  x_offset, y_offset, offset = sync_pair(xPath, yPath)
+  transition['x_offset'] = x_offset
+  transition['y_offset'] = y_offset
+  transition['offset'] = offset
+
+  print(f'Synced pair {i + 1 + TRANSITION_START_INDEX}/{len(transitions) + TRANSITION_START_INDEX}: ')
+  print(basename(xPath))
+  print(basename(yPath))
+  print(f'x_offset: {x_offset}')
+  print(f'y_offset: {y_offset}')
+  print(f'offset: {offset}')
+  print()
+
+
 def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
-  print('Syncing pair: ')
-  print(basename(x))
-  print(basename(y))
 
   # start docker panako
   process = subprocess.Popen([DOCKER_COMMAND], 
@@ -187,7 +207,6 @@ def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
     raise Exception(stderr)
 
   if stdout.find('No alignment found') != -1:
-    print('NO ALIGNMENT FOUND')
     return None, None, None
 
   print(stdout)
@@ -198,7 +217,6 @@ def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
   end_string = 's - '
   end_index = stdout.find(end_string, start_index)
   x_offset = stdout[start_index:end_index]
-  print(f'x_offset: {x_offset}')
 
   # parse y_offset
   start_string = f'{basename(y)} ['
@@ -206,7 +224,6 @@ def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
   end_string = 's - '
   end_index = stdout.find(end_string, start_index)
   y_offset = stdout[start_index:end_index]
-  print(f'y_offset: {y_offset}')
 
   # parse offset
   start_string = 'with an offset of '
@@ -214,7 +231,6 @@ def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
   end_string = 's ('
   end_index = stdout.find(end_string, start_index)
   offset = stdout[start_index:end_index]
-  print(f'offset: {offset}')
 
   return float(x_offset), float(y_offset), float(offset)
 
@@ -239,38 +255,33 @@ def parse_playlist(playlist):
   } for e in entries]
 
   # pitch-shift audio files where needed
-  for audio_object in audio_objects:
-    audio_object['shifted_path'] = _get_shifted_path(audio_object)
+  with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    executor.map(_set_shifted_path, audio_objects)
 
   return audio_objects
 
 
-def _get_shifted_path(audio_object):
-  # pitch shift audio as needed
+def _set_shifted_path(audio_object):
   pitch_semitones = audio_object['pitch_semitones']
   file = audio_object['file']
-  if not pitch_semitones:
-    return ''
+  shifted_path = ''
 
-  shifted_file = f'PITCH SHIFTED {pitch_semitones}: {Path(file).stem}.wav'
-  shifted_path = join(PLAYLIST_PATH, shifted_file)
+  # pitch shift audio as needed
+  if pitch_semitones:
+    shifted_file = f'PITCH SHIFTED {pitch_semitones}: {Path(file).stem}.wav'
+    shifted_path = join(PLAYLIST_PATH, shifted_file)
 
-  # create new pitch shifted file if not exists
-  if not Path(shifted_path).is_file():
+    # create new pitch shifted file if not exists
+    if not Path(shifted_path).is_file():
 
-    print('loading file to shift: ', pitch_semitones, file)
-    y, sr = librosa.load(audio_object['absolute_path'])
-    print('loaded file, SHAPE: ', y.shape)
-    print('shifting wave')
-    y_shift = pyrubberband.pitch_shift(y, sr, pitch_semitones)
-    print('shifted wave')
-    print('wri1ting last wave')
-    soundfile.write(shifted_path, y, sr)
-    print('wrote last wave')
-  else:
-    print('CACHED SHIFT', file, pitch_semitones)
+      y, sr = librosa.load(audio_object['absolute_path'])
+      print(f'shifting file by {pitch_semitones}: "{file}"')
+      y_shift = pyrubberband.pitch_shift(y, sr, pitch_semitones)
+      soundfile.write(shifted_path, y_shift, sr)
+    else:
+      print(f'CACHED SHIFT: "{shifted_file}"')
 
-  return shifted_path
+  audio_object['shifted_path'] = shifted_path
 
 
 def _get_pitch_semitones(entry):
