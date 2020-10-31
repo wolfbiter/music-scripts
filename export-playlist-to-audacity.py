@@ -23,8 +23,8 @@ DOCKER_AUDIO_PATH = '/home/audioinput'
 DOCKER_WORKING_DIRECTORY = '/Users/kane/projects/docker-panako'
 DOCKER_COMMAND = f'docker run -i --volume {PLAYLIST_PATH}:{DOCKER_AUDIO_PATH} --rm panako bash'
 
-TRANSITION_START_INDEX = 15 - 1 # subtract 1 for 0 index
-TRANSITION_END_INDEX = 25 # None for last element in array
+TRANSITION_START_INDEX = 32
+TRANSITION_END_INDEX = None # None for last element in array
 
 def add_transitions_to_audacity(transitions):
 
@@ -42,9 +42,8 @@ def add_transitions_to_audacity(transitions):
     if i != len(transitions) - 1:
       next_transition = transitions[i + 1]
       y_end = next_transition['x_offset']
-    y_end = 1000 if y_end == None else y_end
-    if y_start >= y_end:
-      print('WARNING y_start >= y_end')
+    else:
+      y_end = None
 
     print(f'\nTransition {i + 1 + TRANSITION_START_INDEX}/{len(transitions) + TRANSITION_START_INDEX}')
     print(f'x: {basename(transition["x"]["absolute_path"])}')
@@ -54,6 +53,8 @@ def add_transitions_to_audacity(transitions):
     print(f'offset: {offset}')
     print(f'y_start: {y_start}')
     print(f'y_end: {y_end}')
+    if (y_end != None) and (y_start >= y_end):
+      print('WARNING y_start >= y_end')
 
     # prompt user if they want to add this transition
     should_add_transition = None
@@ -82,12 +83,12 @@ def add_transitions_to_audacity(transitions):
     # only load x for first transition
     if next_track == 0:
       # create duplicate with overlap for clarity
-      audacity.load_track(
-        transition['x'],
-        track=next_track
-      )
-      audacity.mute_track(track=next_track)
-      next_track += 1
+      # audacity.load_track(
+      #   transition['x'],
+      #   track=next_track
+      # )
+      # audacity.mute_track(track=next_track)
+      # next_track += 1
 
       audacity.load_track(
         transition['x'],

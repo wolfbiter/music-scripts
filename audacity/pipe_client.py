@@ -20,7 +20,9 @@ def load_track(audio_object, track=None):
     do( f'SetTrackAudio: Gain={audio_object["auto_gain"]}' )
 
 
-def trim_track(start=0, end=None, track=None):
+def trim_track(start=0, end=999999, track=None):
+  if end == None:
+    end = 999999
   if start != None and end != None and track != None:
     do( f'Select: Start={start} End={end} Track={track}')
     do( 'Trim' )
