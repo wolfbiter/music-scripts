@@ -9,6 +9,7 @@ TOFILE = None
 FROMFILE = None
 EOL = None
 
+
 def load_track(audio_object, track=None):
   filename = audio_object['absolute_path']
   do( f'SelectTracks: Track={track} TrackCount=1')

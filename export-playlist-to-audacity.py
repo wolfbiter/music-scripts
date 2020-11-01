@@ -55,6 +55,7 @@ def add_transitions_to_audacity(transitions):
     print(f'y_end: {y_end}')
     if (y_end != None) and (y_start >= y_end):
       print('WARNING y_start >= y_end')
+      y_end = None
 
     # prompt user if they want to add this transition
     should_add_transition = None
