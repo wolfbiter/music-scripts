@@ -146,6 +146,26 @@ def add_transitions_to_audacity(transitions):
   audacity.close_pipes()
 
 
+def review_transitions():
+  num_transitions = len(audacity.get_tracks_info()) - 1
+
+  i = 1
+  while i < num_transitions:
+    audacity.zoom_to_transition(i)
+    print(f'\nTransition {i}/{num_transitions}')
+
+    # prompt user to move forward or backward
+    valid_input = None
+    while valid_input == None:
+      user_input = input('Would you to go forward or back? (y/b): ').lower().strip()
+      if user_input == 'y':
+        valid_input = True
+      elif user_input == 'b':
+        valid_input = True
+        i -= (1 if i == 0 else 2)
+        print(f'GOING BACK')
+
+
 def main():
   print(f'PYTHON EXPORT PLAYLIST_PATH: {PLAYLIST_PATH}')
 
