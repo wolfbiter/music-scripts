@@ -23,7 +23,7 @@ DOCKER_AUDIO_PATH = '/home/audioinput'
 DOCKER_WORKING_DIRECTORY = '/Users/kane/projects/docker-panako'
 DOCKER_COMMAND = f'docker run -i --volume {PLAYLIST_PATH}:{DOCKER_AUDIO_PATH} --rm panako bash'
 
-TRANSITION_START_INDEX = 32
+TRANSITION_START_INDEX = 0
 TRANSITION_END_INDEX = None # None for last element in array
 
 def add_transitions_to_audacity(transitions):
@@ -172,7 +172,7 @@ def main():
 
   # parse audio objects from playlist
   audio_objects = parse_playlist(PLAYLIST_PATH)
-  print('PARSED AUDIO OBJECTS FROM PLAYLIST\n')
+  print(f'PARSED {len(audio_objects)} AUDIO OBJECTS FROM PLAYLIST')
 
   # collect audio_objects into transition pairs
   transitions = []
@@ -182,11 +182,14 @@ def main():
     transitions.append({ 'x': x, 'y': y })
 
   # sync transition pairs in panako
+  print(f'ALIGNING TRANSITIONS\n')
   transitions = transitions[TRANSITION_START_INDEX:TRANSITION_END_INDEX]
   with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
     executor.map(lambda t: _set_transition_offset(transitions, t), transitions)
 
   # add synced transitions to audacity project
+  print(f'ADDING TRANSITIONS TO AUDACITY FROM {TRANSITION_START_INDEX} to {TRANSITION_END_INDEX}')
+  print('If nothing happens, check to make sure Audacity is open and running\n')
   add_transitions_to_audacity(transitions)
 
 
@@ -226,7 +229,8 @@ def sync_pair(x, y, SYNC_MIN_ALIGNED_MATCHES=2):
   stdout, stderr = process.communicate(
     input=f'panako sync SYNC_MIN_ALIGNED_MATCHES={SYNC_MIN_ALIGNED_MATCHES} "{xPath}" "{yPath}"')
   if stderr:
-    raise Exception(stderr)
+    print(f'ERROR RUNNING DOCKER_COMMAND: "{stderr}"')
+    return None, None, None
 
   if stdout.find('No alignment found') != -1:
     return None, None, None
