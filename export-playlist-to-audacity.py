@@ -184,19 +184,21 @@ def main():
   # sync transition pairs in panako
   print(f'ALIGNING TRANSITIONS\n')
   transitions = transitions[TRANSITION_START_INDEX:TRANSITION_END_INDEX]
+  print('_set_transition_offset', len(transitions))
   with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
     executor.map(lambda t: _set_transition_offset(transitions, t), transitions)
 
   # add synced transitions to audacity project
   print(f'ADDING TRANSITIONS TO AUDACITY FROM {TRANSITION_START_INDEX} to {TRANSITION_END_INDEX}')
-  print('If nothing happens, check to make sure Audacity is open and running\n')
+  print('If nothing happens, check to make sure Docker is running and Audacity is open and running')
   add_transitions_to_audacity(transitions)
 
 
 def _set_transition_offset(transitions, transition):
   i = transitions.index(transition)
-  xPath = transition['x']['shifted_path'] or transition['x']['absolute_path']
-  yPath = transition['y']['shifted_path'] or transition['y']['absolute_path']
+  xPath = transition['x']['end_bpm_shifted_path']
+  yPath = transition['y']['start_bpm_shifted_path']
+  print('_set_transition_offset', xPath, yPath)
   x_offset, y_offset, offset = sync_pair(xPath, yPath)
   transition['x_offset'] = x_offset
   transition['y_offset'] = y_offset
@@ -276,38 +278,93 @@ def parse_playlist(playlist):
     'file': e.LOCATION['FILE'],
     'absolute_path': join(PLAYLIST_PATH, e.LOCATION['FILE']),
     'auto_gain': e.LOUDNESS['PERCEIVED_DB'],
+    'bpm': float(e.TEMPO['BPM']),
     'pitch_semitones': _get_pitch_semitones(e),
     'is_recorded_mix': _is_recorded_mix(e)
   } for e in entries]
 
-  # pitch-shift audio files where needed
+  # determine reference bpms
+  for i in range(len(audio_objects)):
+    audio_object = audio_objects[i]
+    bpm = audio_object['bpm']
+
+    if i == 0:
+      audio_object['start_bpm'] = bpm
+    else:
+      prev_bpm = audio_objects[i - 1]['bpm']
+      audio_object['start_bpm'] = (bpm + prev_bpm) / 2.0
+
+    if i == len(audio_objects) - 1:
+      audio_object['end_bpm'] = bpm
+    else:
+      next_bpm = audio_objects[i + 1]['bpm']
+      audio_object['end_bpm'] = (bpm + next_bpm) / 2.0
+
+  print()
+  print('audio object BPMs')
+  print([a['start_bpm'] for a in audio_objects])
+
+
+  # pitch-shift audio files as needed
   with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-    executor.map(_set_shifted_path, audio_objects)
+    executor.map(_set_pitch_shifted_path, audio_objects)
+
+  # tempo-shift audio files as needed
+  with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    tempo_shifts = [(obj, 'start_bpm') for obj in audio_objects] + [(obj, 'end_bpm') for obj in audio_objects]
+    executor.map(_set_tempo_shifted_path, tempo_shifts)
 
   return audio_objects
 
 
-def _set_shifted_path(audio_object):
+def _set_pitch_shifted_path(audio_object):
   pitch_semitones = audio_object['pitch_semitones']
   file = audio_object['file']
-  shifted_path = ''
+  pitch_shifted_path = audio_object['absolute_path']
 
   # pitch shift audio as needed
   if pitch_semitones:
     shifted_file = f'PITCH SHIFTED {pitch_semitones}: {Path(file).stem}.wav'
-    shifted_path = join(PLAYLIST_PATH, shifted_file)
+    pitch_shifted_path = join(PLAYLIST_PATH, shifted_file)
 
     # create new pitch shifted file if not exists
-    if not Path(shifted_path).is_file():
-
+    if not Path(pitch_shifted_path).is_file():
       y, sr = librosa.load(audio_object['absolute_path'])
       print(f'shifting file by {pitch_semitones}: "{file}"')
       y_shift = pyrubberband.pitch_shift(y, sr, pitch_semitones)
-      soundfile.write(shifted_path, y_shift, sr)
+      soundfile.write(pitch_shifted_path, y_shift, sr)
     else:
       print(f'CACHED SHIFT: "{shifted_file}"')
 
-  audio_object['shifted_path'] = shifted_path
+  audio_object['pitch_shifted_path'] = pitch_shifted_path
+
+
+def _set_tempo_shifted_path(info):
+  (audio_object, path) = info
+  base_bpm = audio_object['bpm']
+  target_bpm = audio_object[path]
+  file = audio_object['file']
+  audio_path = audio_object['pitch_shifted_path']
+  tempo_shifted_path = audio_path
+  target_rate = target_bpm / base_bpm
+
+  # tempo shift audio as needed
+  # TODO: fix this: currently broken because
+  # the tempo-shifted version sounds awful
+  if False and target_rate != 1:
+    shifted_file = f'BPM SHIFTED {target_rate}: {Path(file).stem}.wav'
+    tempo_shifted_path = join(PLAYLIST_PATH, shifted_file)
+
+    # create new tempo shifted file if not exists
+    if not Path(tempo_shifted_path).is_file():
+      y, sr = librosa.load(audio_path)
+      print(f'shifting file from {base_bpm}bpm to {target_bpm}bpm: "{file}"')
+      y_shift = librosa.effects.time_stretch(y, 1 / target_rate)
+      soundfile.write(tempo_shifted_path, y_shift, sr)
+    else:
+      print(f'CACHED SHIFT: "{shifted_file}"')
+
+  audio_object[f'{path}_shifted_path'] = tempo_shifted_path
 
 
 def _get_pitch_semitones(entry):
